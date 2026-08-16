@@ -12,7 +12,7 @@ body{background:#f4f6f9;font-family:"Noto Sans TC","Microsoft JhengHei",sans-ser
 .vehicle-card-header{background:#212529;color:#fff;padding:10px 14px;font-weight:700}
 .vehicle-info{padding:15px}
 .vehicle-info-row{display:flex;margin-bottom:9px;line-height:1.5}
-.vehicle-label{min-width:88px;font-weight:700;color:#495057}
+.vehicle-label{width:88px;min-width:88px;font-weight:700;color:#495057}
 .vehicle-value{flex:1;word-break:break-word}
 .plate{font-size:1.2rem;font-weight:800;letter-spacing:1px}
 .vehicle-actions{padding:0 15px 15px;display:flex;gap:8px}
@@ -318,11 +318,11 @@ function renderCards(list) {
     return `
       <div class="col">
         <div class="vehicle-card shadow-sm">
-          <div class="vehicle-card-header">🚗 車輛登記</div>
+          <div class="vehicle-card-header">車號&nbsp;&nbsp;${esc(v.num)}</div>
           <div class="vehicle-info">
             <div class="vehicle-info-row"><div class="vehicle-label">使用者</div><div class="vehicle-value">${esc(v.user)}</div></div>
-            <div class="vehicle-info-row"><div class="vehicle-label">車號</div><div class="vehicle-value plate">${esc(v.num)}</div></div>
-            <div class="vehicle-info-row"><div class="vehicle-label">時間／日期</div><div class="vehicle-value">${esc(v.data)}</div></div>
+            <div class="vehicle-info-row"><div class="vehicle-label">分機</div><div class="vehicle-value">${esc(v.ext)}</div></div>
+             <div class="vehicle-info-row"><div class="vehicle-label">時間／日期</div><div class="vehicle-value">${esc(v.data)}</div></div>
             <div class="vehicle-info-row"><div class="vehicle-label">用途</div><div class="vehicle-value">${esc(v.use)}</div></div>
             <div class="vehicle-info-row mb-0"><div class="vehicle-label">備註</div><div class="vehicle-value">${esc(v.notes)}</div></div>
           </div>
@@ -340,6 +340,7 @@ function openAdd() {
   document.getElementById("modalTitle").textContent = "新增車輛";
   document.getElementById("vehicleForm").reset();
   document.getElementById("oldId").value = "";
+  document.getElementById("ext").value = "";
   document.getElementById("passwd").value = "";
   updatePlateOptions();
   setNow();
@@ -406,6 +407,7 @@ function openEditAfterPassword(index) {
   document.getElementById("user").value = v.user || "";
   updatePlateOptions();
   document.getElementById("plate").value = v.num || "";
+  document.getElementById("ext").value = v.ext || "";
   document.getElementById("passwd").value = v.passwd || "";
 
   const editKey = dateKey(v.data);
@@ -430,6 +432,7 @@ document.getElementById("vehicleForm").addEventListener("submit", async e => {
   const data = {
     user: document.getElementById("user").value.trim(),
     num: document.getElementById("plate").value.trim(),
+    ext: document.getElementById("ext").value.trim(),
     passwd: document.getElementById("passwd").value,
     data: document.getElementById("datetime").value.replace("T"," "),
     use: document.getElementById("purpose").value.trim(),
