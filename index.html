@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>車輛登記管理系統</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+body{background:#f4f6f9;font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif}
+.main-header{background:linear-gradient(135deg,#0d6efd,#084298)}
+.vehicle-card{height:100%;min-height:320px;border:2px solid #212529;border-radius:12px;background:#fff;overflow:hidden}
+.vehicle-card-header{background:#212529;color:#fff;padding:10px 14px;font-weight:700}
+.vehicle-info{padding:15px}
+.vehicle-info-row{display:flex;margin-bottom:9px;line-height:1.5}
+.vehicle-label{min-width:88px;font-weight:700;color:#495057}
+.vehicle-value{flex:1;word-break:break-word}
+.plate{font-size:1.2rem;font-weight:800;letter-spacing:1px}
+.vehicle-actions{padding:0 15px 15px;display:flex;gap:8px}
+.vehicle-actions .btn{flex:1}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.calendar-weekday{padding:8px;text-align:center;font-weight:700;background:#f1f3f5;border-bottom:1px solid #dee2e6}
+.calendar-day{min-height:72px;border-right:1px solid #e9ecef;border-bottom:1px solid #e9ecef;padding:6px;cursor:pointer;background:#fff}
+.calendar-day:hover{background:#f0f6ff}
+.calendar-day.empty{background:#f8f9fa;cursor:default}
+.calendar-day.today{background:#e7f1ff}
+.calendar-day.selected{outline:3px solid #0d6efd;outline-offset:-3px}
+.day-number{font-weight:700}
+</style>
+</head>
+<body>
+
+<div id="title"></div>
+
+<main class="container-fluid px-3 px-md-5 py-4">
+  <div id="alertArea"></div>
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="fw-bold fs-5" id="monthDisplay">📅 2026 年 8 月</div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm" onclick="previousMonth()">‹ 上月</button>
+      <button class="btn btn-primary btn-sm" onclick="goCurrentMonth()">本月</button>
+      <button class="btn btn-outline-secondary btn-sm" onclick="nextMonth()">下月 ›</button>
+    </div>
+  </div>
+  <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-4" id="vehicleGrid"></div>
+</main>
+
+<!-- 月曆功能保留供月份計算使用；不再彈出視窗 -->
+<div class="modal fade" id="calendarModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">📅 選擇月份</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="p-3 border-bottom bg-light">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-5">
+              <label class="form-label fw-bold mb-1">選擇月份</label>
+              <input type="month" id="monthPicker" class="form-control">
+            </div>
+            <div class="col-md-7 d-flex gap-2">
+              <button class="btn btn-outline-secondary flex-fill" onclick="previousMonth()">‹ 上月</button>
+              <button class="btn btn-primary flex-fill" onclick="goCurrentMonth()">本月</button>
+              <button class="btn btn-outline-secondary flex-fill" onclick="nextMonth()">下月 ›</button>
+            </div>
+          </div>
+          <div class="fw-bold mt-3" id="calendarTitle"></div>
+        </div>
+        <div class="calendar-grid">
+          <div class="calendar-weekday">日</div><div class="calendar-weekday">一</div>
+          <div class="calendar-weekday">二</div><div class="calendar-weekday">三</div>
+          <div class="calendar-weekday">四</div><div class="calendar-weekday">五</div>
+          <div class="calendar-weekday">六</div>
+        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" onclick="showAllForMonth()">顯示本月全部</button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 編輯／刪除密碼驗證 -->
+<div class="modal fade" id="passwordModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+        <h5 class="modal-title">🔐 請輸入密碼</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="small text-secondary mb-2" id="passwordActionText">此資料需要密碼驗證</div>
+        <input id="verifyPassword" type="password" class="form-control"
+               placeholder="請輸入當初設定的密碼" autocomplete="current-password">
+        <div id="passwordError" class="text-danger small mt-2 d-none">密碼錯誤，請重新輸入。</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" onclick="verifyPassword()">確認</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 新增／修改 -->
+<div class="modal fade" id="vehicleModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="vehicleForm">
+        <div class="modal-header bg-primary text-white">
+          <h5 class="modal-title" id="modalTitle">新增車輛</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="oldId">
+          <div class="mb-3">
+            <label class="form-label fw-bold">使用者 *</label>
+            <input id="user" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">車號 *</label>
+            <select id="plate" class="form-select" required>
+              <option value="" selected disabled>請選擇車號</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">密碼</label>
+            <input id="passwd" type="password" class="form-control" placeholder="請輸入密碼">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">時間／日期 *</label>
+            <input id="datetime" type="datetime-local" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">用途</label>
+            <input id="purpose" class="form-control" placeholder="請輸入用途">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">備註</label>
+            <textarea id="note" class="form-control" rows="3"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary">儲存資料</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="title.js"></script>
+<script>
+const API_URL = "https://sheetdb.io/api/v1/d13a0o9oxtjnc";
+
+let vehicles = [];
+let currentMonth = "";
+let selectedDate = "";
+let editing = false;
+let pendingAction = null;
+let pendingIndex = -1;
+
+document.addEventListener("DOMContentLoaded", async () => {
+  currentMonth = "2026-08";
+  document.getElementById("monthPicker").value = currentMonth;
+  await loadVehicles();
+  renderCalendar();
+  showSelectedMonth();
+});
+
+document.getElementById("monthPicker").addEventListener("change", () => {
+  currentMonth = document.getElementById("monthPicker").value;
+  selectedDate = "";
+  showSelectedMonth();
+});
+
+async function loadVehicles() {
+  try {
+    const response = await fetch(API_URL);
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    vehicles = await response.json();
+    updatePlateOptions();
+    renderCalendar();
+    showSelectedMonth();
+  } catch (error) {
+    console.error(error);
+    showAlert("無法讀取 SheetDB 資料，請確認 API。", "danger");
+  }
+}
+
+function updatePlateOptions() {
+  const select = document.getElementById("plate");
+  const current = select.value;
+  const nums = [...new Set(vehicles.map(v => v.num).filter(Boolean))].sort();
+  select.innerHTML = '<option value="" disabled>請選擇車號</option>';
+  nums.forEach(num => {
+    select.insertAdjacentHTML("beforeend", `<option value="${esc(num)}">${esc(num)}</option>`);
+  });
+  if (current && nums.includes(current)) select.value = current;
+}
+
+function monthKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+}
+
+function dateKey(value) {
+  if (!value) return "";
+
+  const s = String(value).replace("T"," ").trim();
+
+  // 支援：
+  // 2026/08/25 08:30
+  // 2026-08-25 08:30
+  // 8/25/26 8:30   ← 你的 SheetDB 目前就是這種格式
+  let m = s.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+  if (m) {
+    return `${m[1]}-${String(m[2]).padStart(2,"0")}-${String(m[3]).padStart(2,"0")}`;
+  }
+
+  m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2})/);
+  if (m) {
+    const year = 2000 + Number(m[3]);
+    return `${year}-${String(m[1]).padStart(2,"0")}-${String(m[2]).padStart(2,"0")}`;
+  }
+
+  return "";
+}
+
+function renderCalendar() {
+  const [year, month] = currentMonth.split("-").map(Number);
+  document.getElementById("calendarTitle").textContent = `${year} 年 ${month} 月`;
+  const monthDisplay = document.getElementById("monthDisplay");
+  if (monthDisplay) monthDisplay.textContent = `📅 ${year} 年 ${month} 月`;
+
+  const grid = document.getElementById("calendarGrid");
+  grid.innerHTML = "";
+
+  const first = new Date(year, month-1, 1).getDay();
+  const days = new Date(year, month, 0).getDate();
+  const today = dateKey(new Date().toISOString());
+
+  for (let i=0; i<first; i++) {
+    grid.innerHTML += '<div class="calendar-day empty"></div>';
+  }
+
+  for (let day=1; day<=days; day++) {
+    const key = `${currentMonth}-${String(day).padStart(2,"0")}`;
+    const count = vehicles.filter(v => dateKey(v.data) === key).length;
+
+    grid.innerHTML += `
+      <div class="calendar-day ${today===key?"today":""} ${selectedDate===key?"selected":""}"
+           onclick="selectDate('${key}')">
+        <div class="day-number">${day}</div>
+        ${count ? `<span class="badge text-bg-primary mt-1">${count} 筆</span>` : ""}
+      </div>`;
+  }
+}
+
+function selectDate(key) {
+  selectedDate = key;
+  renderCalendar();
+  renderCards(vehicles.filter(v => dateKey(v.data) === key));
+  closeCalendar();
+}
+
+function showSelectedMonth() {
+  selectedDate = "";
+  document.getElementById("monthPicker").value = currentMonth;
+  renderCalendar();
+
+  // 例如選擇 2026-08，就只顯示 2026-08 的資料
+  const monthData = vehicles.filter(v => dateKey(v.data).startsWith(currentMonth));
+
+  renderCards(monthData);
+}
+
+function showAllForMonth() {
+  showSelectedMonth();
+}
+
+function previousMonth() {
+  const [y,m] = currentMonth.split("-").map(Number);
+  currentMonth = monthKey(new Date(y,m-2,1));
+  document.getElementById("monthPicker").value = currentMonth;
+  selectedDate = "";
+  showSelectedMonth();
+}
+
+function nextMonth() {
+  const [y,m] = currentMonth.split("-").map(Number);
+  currentMonth = monthKey(new Date(y,m,1));
+  document.getElementById("monthPicker").value = currentMonth;
+  selectedDate = "";
+  showSelectedMonth();
+}
+
+function goCurrentMonth() {
+  currentMonth = "2026-08";
+  document.getElementById("monthPicker").value = currentMonth;
+  selectedDate = "";
+  showSelectedMonth();
+}
+
+function renderCards(list) {
+  const grid = document.getElementById("vehicleGrid");
+
+  if (!list.length) {
+    grid.innerHTML = '<div class="col-12"><div class="alert alert-secondary text-center">目前沒有符合條件的車輛資料</div></div>';
+    return;
+  }
+
+  grid.innerHTML = list.map(v => {
+    const index = vehicles.indexOf(v);
+    return `
+      <div class="col">
+        <div class="vehicle-card shadow-sm">
+          <div class="vehicle-card-header">🚗 車輛登記</div>
+          <div class="vehicle-info">
+            <div class="vehicle-info-row"><div class="vehicle-label">使用者</div><div class="vehicle-value">${esc(v.user)}</div></div>
+            <div class="vehicle-info-row"><div class="vehicle-label">車號</div><div class="vehicle-value plate">${esc(v.num)}</div></div>
+            <div class="vehicle-info-row"><div class="vehicle-label">時間／日期</div><div class="vehicle-value">${esc(v.data)}</div></div>
+            <div class="vehicle-info-row"><div class="vehicle-label">用途</div><div class="vehicle-value">${esc(v.use)}</div></div>
+            <div class="vehicle-info-row mb-0"><div class="vehicle-label">備註</div><div class="vehicle-value">${esc(v.notes)}</div></div>
+          </div>
+          <div class="vehicle-actions">
+            <button class="btn btn-outline-primary btn-sm" onclick="editVehicle(${index})">✏️ 修改資料</button>
+            <button class="btn btn-outline-danger btn-sm" onclick="deleteVehicle(${index})">🗑️ 刪除資料</button>
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function openAdd() {
+  editing = false;
+  document.getElementById("modalTitle").textContent = "新增車輛";
+  document.getElementById("vehicleForm").reset();
+  document.getElementById("oldId").value = "";
+  document.getElementById("passwd").value = "";
+  updatePlateOptions();
+  setNow();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById("vehicleModal")).show();
+}
+
+function editVehicle(index) {
+  requestPassword("edit", index);
+}
+
+function requestPassword(action, index) {
+  pendingAction = action;
+  pendingIndex = index;
+
+  document.getElementById("passwordActionText").textContent =
+    action === "edit"
+      ? "修改這筆資料前，請輸入當初設定的密碼。"
+      : "刪除這筆資料前，請輸入當初設定的密碼。";
+
+  document.getElementById("verifyPassword").value = "";
+  document.getElementById("passwordError").classList.add("d-none");
+
+  bootstrap.Modal.getOrCreateInstance(
+    document.getElementById("passwordModal")
+  ).show();
+
+  setTimeout(() => document.getElementById("verifyPassword").focus(), 300);
+}
+
+function verifyPassword() {
+  if (pendingIndex < 0 || !pendingAction) return;
+
+  const v = vehicles[pendingIndex];
+  const inputPassword = document.getElementById("verifyPassword").value;
+
+  if (String(inputPassword) !== String(v.passwd ?? "")) {
+    document.getElementById("passwordError").classList.remove("d-none");
+    document.getElementById("verifyPassword").select();
+    return;
+  }
+
+  bootstrap.Modal.getOrCreateInstance(
+    document.getElementById("passwordModal")
+  ).hide();
+
+  const action = pendingAction;
+  const index = pendingIndex;
+  pendingAction = null;
+  pendingIndex = -1;
+
+  if (action === "edit") {
+    openEditAfterPassword(index);
+  } else {
+    deleteVehicleAfterPassword(index);
+  }
+}
+
+function openEditAfterPassword(index) {
+  const v = vehicles[index];
+  editing = true;
+
+  document.getElementById("modalTitle").textContent = "修改車輛資料";
+  document.getElementById("oldId").value = v.id || "";
+  document.getElementById("user").value = v.user || "";
+  updatePlateOptions();
+  document.getElementById("plate").value = v.num || "";
+  document.getElementById("passwd").value = v.passwd || "";
+
+  const editKey = dateKey(v.data);
+  const timeMatch = String(v.data || "").match(/(\d{1,2}:\d{2})/);
+  document.getElementById("datetime").value =
+    editKey + (timeMatch ? "T" + timeMatch[1] : "T00:00");
+
+  document.getElementById("purpose").value = v.use || "";
+  document.getElementById("note").value = v.notes || "";
+
+  bootstrap.Modal.getOrCreateInstance(
+    document.getElementById("vehicleModal")
+  ).show();
+}
+
+
+document.getElementById("vehicleForm").addEventListener("submit", async e => {
+  e.preventDefault();
+
+  const oldId = document.getElementById("oldId").value.trim();
+
+  const data = {
+    user: document.getElementById("user").value.trim(),
+    num: document.getElementById("plate").value.trim(),
+    passwd: document.getElementById("passwd").value,
+    data: document.getElementById("datetime").value.replace("T"," "),
+    use: document.getElementById("purpose").value.trim(),
+    notes: document.getElementById("note").value.trim()
+  };
+
+  try {
+    let response;
+
+    if (editing) {
+      response = await fetch(`${API_URL}/id/${encodeURIComponent(oldId)}`, {
+        method: "PATCH",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({data})
+      });
+    } else {
+      response = await fetch(API_URL, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({data})
+      });
+    }
+
+    if (!response.ok) throw new Error("HTTP " + response.status);
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById("vehicleModal")).hide();
+    await loadVehicles();
+
+    currentMonth = dateKey(data.data).substring(0,7);
+    document.getElementById("monthPicker").value = currentMonth;
+    showAllForMonth();
+
+    showAlert(editing ? "資料已修改。" : "資料已新增。");
+  } catch (error) {
+    console.error(error);
+    showAlert("儲存失敗，請檢查 SheetDB 權限或 API。", "danger");
+  }
+});
+
+async function deleteVehicle(index) {
+  requestPassword("delete", index);
+}
+
+async function deleteVehicleAfterPassword(index) {
+  const v = vehicles[index];
+
+  if (!confirm(`確定要刪除「${v.user}／${v.num}」的資料嗎？`)) return;
+
+  try {
+    const response = await fetch(
+      `${API_URL}/id/${encodeURIComponent(v.id)}`,
+      {method: "DELETE"}
+    );
+
+    if (!response.ok) throw new Error("HTTP " + response.status);
+
+    await loadVehicles();
+    showAlert("資料已刪除。");
+  } catch (error) {
+    console.error(error);
+    showAlert("刪除失敗，請確認 SheetDB 設定。", "danger");
+  }
+}
+
+
+document.getElementById("verifyPassword").addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    verifyPassword();
+  }
+});
+
+function setNow() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2,"0");
+  document.getElementById("datetime").value =
+    `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function closeCalendar() {
+  const modal = bootstrap.Modal.getInstance(document.getElementById("calendarModal"));
+  if (modal) modal.hide();
+}
+
+function esc(v) {
+  return String(v ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function showAlert(message, type="success") {
+  document.getElementById("alertArea").innerHTML = `
+    <div class="alert alert-${type} alert-dismissible fade show">
+      ${esc(message)}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>`;
+  setTimeout(() => document.getElementById("alertArea").innerHTML = "", 3000);
+}
+</script>
+</body>
+</html>
