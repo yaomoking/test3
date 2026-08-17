@@ -107,14 +107,16 @@ body{background:#f4f6f9;font-family:"Noto Sans TC","Microsoft JhengHei",sans-ser
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="title.js"></script>
-<script src="add.js"></script>
+<script src="add.js?v=30"></script>
+<script src="edit.js?v=30"></script>
 <script>
-const API_URL = "https://sheetdb.io/api/v1/d13a0o9oxtjnc";
+const API_URL = "https://sheetdb.io/api/v1/d13a0o9oxtjnc?sheet=%E8%BB%8A%E8%BC%9B%E7%99%BB%E8%A8%98%E5%B7%A5%E4%BD%9C%E8%A1%A8";
 
 let vehicles = [];
 let currentMonth = "";
 let selectedDate = "";
 let editing = false;
+window.editing = editing;
 let pendingAction = null;
 let pendingIndex = -1;
 
@@ -136,7 +138,9 @@ async function loadVehicles() {
   try {
     const response = await fetch(API_URL);
     if (!response.ok) throw new Error("HTTP " + response.status);
-    vehicles = await response.json();
+    const data = await response.json();
+    vehicles = Array.isArray(data) ? data : [];
+    window.vehicles = vehicles;
     updatePlateOptions();
     renderCalendar();
     showSelectedMonth();
@@ -276,13 +280,13 @@ function renderCards(list) {
           <div class="vehicle-info">
             <div class="vehicle-info-row"><div class="vehicle-label">使用者</div><div class="vehicle-value">${esc(v.user)}</div></div>
             <div class="vehicle-info-row"><div class="vehicle-label">分機</div><div class="vehicle-value">${esc(v.ext)}</div></div>
-             <div class="vehicle-info-row"><div class="vehicle-label">時間／日期</div><div class="vehicle-value">${esc(v.data)}</div></div>
+             <div class="vehicle-info-row"><div class="vehicle-label">日期時段</div><div class="vehicle-value">${esc(v.data)} ${esc(v["time slot"])}</div></div>
             <div class="vehicle-info-row"><div class="vehicle-label">用途</div><div class="vehicle-value">${esc(v.use)}</div></div>
             <div class="vehicle-info-row mb-0"><div class="vehicle-label">備註</div><div class="vehicle-value">${esc(v.notes)}</div></div>
           </div>
           <div class="vehicle-actions">
-            <button class="btn btn-outline-primary btn-sm" onclick="editVehicle(${index})">✏️ 修改資料</button>
-            <button class="btn btn-outline-danger btn-sm" onclick="deleteVehicle(${index})">🗑️ 刪除資料</button>
+            <button class="btn btn-outline-primary btn-sm" onclick="window.editVehicle(${index})">✏️ 修改資料</button>
+            <button class="btn btn-outline-danger btn-sm" onclick="window.deleteVehicle(${index})">🗑️ 刪除資料</button>
           </div>
         </div>
       </div>`;
@@ -290,122 +294,15 @@ function renderCards(list) {
 }
 
 
-function editVehicle(index) {
-  requestPassword("edit", index);
-}
-
-function requestPassword(action, index) {
-  pendingAction = action;
-  pendingIndex = index;
-
-  document.getElementById("passwordActionText").textContent =
-    action === "edit"
-      ? "修改這筆資料前，請輸入當初設定的密碼。"
-      : "刪除這筆資料前，請輸入當初設定的密碼。";
-
-  document.getElementById("verifyPassword").value = "";
-  document.getElementById("passwordError").classList.add("d-none");
-
-  bootstrap.Modal.getOrCreateInstance(
-    document.getElementById("passwordModal")
-  ).show();
-
-  setTimeout(() => document.getElementById("verifyPassword").focus(), 300);
-}
-
-function verifyPassword() {
-  if (pendingIndex < 0 || !pendingAction) return;
-
-  const v = vehicles[pendingIndex];
-  const inputPassword = document.getElementById("verifyPassword").value;
-
-  if (String(inputPassword) !== String(v.passwd ?? "")) {
-    document.getElementById("passwordError").classList.remove("d-none");
-    document.getElementById("verifyPassword").select();
-    return;
-  }
-
-  bootstrap.Modal.getOrCreateInstance(
-    document.getElementById("passwordModal")
-  ).hide();
-
-  const action = pendingAction;
-  const index = pendingIndex;
-  pendingAction = null;
-  pendingIndex = -1;
-
-  if (action === "edit") {
-    openEditAfterPassword(index);
-  } else {
-    deleteVehicleAfterPassword(index);
-  }
-}
-
-function openEditAfterPassword(index) {
-  const v = vehicles[index];
-  editing = true;
-
-  document.getElementById("modalTitle").textContent = "修改車輛資料";
-  document.getElementById("oldId").value = v.id || "";
-  document.getElementById("user").value = v.user || "";
-  updatePlateOptions();
-  document.getElementById("plate").value = v.num || "";
-  document.getElementById("ext").value = v.ext || "";
-  document.getElementById("passwd").value = v.passwd || "";
-
-  const editKey = dateKey(v.data);
-  const timeMatch = String(v.data || "").match(/(\d{1,2}:\d{2})/);
-  document.getElementById("datetime").value =
-    editKey + (timeMatch ? "T" + timeMatch[1] : "T00:00");
-
-  document.getElementById("purpose").value = v.use || "";
-  document.getElementById("note").value = v.notes || "";
-
-  bootstrap.Modal.getOrCreateInstance(
-    document.getElementById("vehicleModal")
-  ).show();
-}
-
-
-
-async function deleteVehicle(index) {
-  requestPassword("delete", index);
-}
-
-async function deleteVehicleAfterPassword(index) {
-  const v = vehicles[index];
-
-  if (!confirm(`確定要刪除「${v.user}／${v.num}」的資料嗎？`)) return;
-
-  try {
-    const response = await fetch(
-      `${API_URL}/id/${encodeURIComponent(v.id)}`,
-      {method: "DELETE"}
-    );
-
-    if (!response.ok) throw new Error("HTTP " + response.status);
-
-    await loadVehicles();
-    showAlert("資料已刪除。");
-  } catch (error) {
-    console.error(error);
-    showAlert("刪除失敗，請確認 SheetDB 設定。", "danger");
-  }
-}
-
-
-document.getElementById("verifyPassword").addEventListener("keydown", e => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    verifyPassword();
-  }
-});
 
 function setNow() {
   const d = new Date();
   const pad = n => String(n).padStart(2,"0");
-  document.getElementById("datetime").value =
-    `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const input = document.getElementById("datetime");
+  if (input) {
+    input.value =
+      `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
 }
 
 function closeCalendar() {
@@ -430,6 +327,16 @@ function showAlert(message, type="success") {
     </div>`;
   setTimeout(() => document.getElementById("alertArea").innerHTML = "", 3000);
 }
+
+// 提供給 add.js / edit.js 使用的全域介面
+window.API_URL = API_URL;
+window.vehicles = vehicles;
+window.loadVehicles = loadVehicles;
+window.showSelectedMonth = showSelectedMonth;
+window.updatePlateOptions = updatePlateOptions;
+window.dateKey = dateKey;
+window.showAlert = showAlert;
+
 </script>
 </body>
 </html>
